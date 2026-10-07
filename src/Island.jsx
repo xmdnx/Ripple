@@ -4,6 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { Camera, Mic, SkipBackIcon, Play, Pause, SkipForwardIcon, Music, Headphones, Zap, Settings, Sun, Cloud, Droplets, Trash2, ChevronRight, ChevronLeft, Plus, Check, X, CloudRain, CloudSnow, CloudLightning, CloudSun, Moon, Eye, EyeOff, GripVertical, List, Search, Star } from "lucide-react";
 import "./App.css";
+import { TABS } from "./constants/tabs";
+import { openApp, openMusicPlayer } from "./utils/launcher";
+import { useWeather } from "./hooks/useWeather";
 
 //Get Date
 function formatDateShort(input) {
@@ -36,76 +39,6 @@ const WeatherIcon = ({ status, size = 16, color = "currentColor" }) => {
   if (s.includes("thunder") || s.includes("storm")) return <CloudLightning size={size} color={color} />;
   return <Sun size={size} color={color} />;
 };
-
-function openApp(app) {
-  if (!app) return;
-  const trimmedApp = app.trim();
-
-  // 1. Explicit protocol URLs — checked first so that file:// and https://
-  //    aren't accidentally caught by the path-separator test below.
-  if (/^(https?|file):\/\//i.test(trimmedApp)) {
-    window.electronAPI?.openExternal(trimmedApp);
-    return;
-  }
-
-  // 2. Launch targets — exe paths, UNC paths, shell: URIs.
-  //    Checked before any dot-based heuristic so .exe and AppID dots never
-  //    trip URL detection.
-  const isLaunchTarget =
-    /[\\\/]/.test(trimmedApp) ||   // path separator → exe path or UNC
-    /\.exe$/i.test(trimmedApp) ||   // bare name ending in .exe
-    trimmedApp.startsWith('shell:'); // UWP shell URI
-
-  if (isLaunchTarget) {
-    window.electronAPI?.launchApp(trimmedApp);
-    return;
-  }
-
-  // 3. IPv4 address or localhost → open in browser via http://
-  //    (dev servers rarely run https)
-  if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/.test(trimmedApp) ||
-    /^localhost(:\d+)?(\/.*)?$/i.test(trimmedApp)) {
-    window.electronAPI?.openExternal(`http://${trimmedApp}`);
-    return;
-  }
-
-  // 4. Bare domain — must end with 2+ alpha chars so python3.11 and
-  //    192.168.1.1 are not misclassified. DO NOT use .includes('.').
-  if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(trimmedApp)) {
-    window.electronAPI?.openExternal(`https://${trimmedApp}`);
-    return;
-  }
-
-  // 5. Everything else — treat as a command or app name
-  window.electronAPI?.launchApp(trimmedApp);
-}
-
-// Open music player based on source (Spotify, Music, etc.)
-function openMusicPlayer(source) {
-  if (!source) return;
-
-  if (source === "Spotify") {
-    openApp("Spotify");
-  } else if (source === "Music") {
-    openApp("Music");
-  } else if (source === "music.apple.com" || source.includes("Apple")) {
-    openApp("Music");
-  } else {
-    // Fallback: try to open by source name
-    openApp(source);
-  }
-}
-
-const TABS = [
-  { id: 0, name: "Browser Search", icon: (color) => <Search size={16} color={color} /> },
-  { id: 1, name: "Workflows & QA", icon: (color) => <Zap size={16} color={color} /> },
-  { id: 2, name: "Overview", icon: (color) => <Sun size={16} color={color} /> },
-  { id: 3, name: "Now Playing", icon: (color) => <Music size={16} color={color} /> },
-  { id: 4, name: "AI Assistant", icon: (color) => <Mic size={16} color={color} /> },
-  { id: 5, name: "Clipboard", icon: (color) => <List size={16} color={color} /> },
-  { id: 6, name: "Tasks", icon: (color) => <Check size={16} color={color} /> },
-  { id: 7, name: "Settings", icon: (color) => <Settings size={16} color={color} /> },
-];
 
 export default function Island() {
   const islandElementRef = useRef(null);
@@ -156,8 +89,7 @@ export default function Island() {
     localStorage.getItem("show-info-when-idle") === "true"
   );
   const [hourFormat, setHourFormat] = useState((localStorage.getItem("hour-format") || "12-hr") === "12-hr");
-  const [weather, setWeather] = useState({ temp: "", status: "" });
-  const [weatherUnit, setweatherUnit] = useState(localStorage.getItem("weather-unit") || "f");
+  const { weather, weatherUnit, setWeatherUnit } = useWeather();
   const [theme, setTheme] = useState("default");
   const [bgColor, setBgColor] = useState(localStorage.getItem("bg-color") || "#000000");
   const [textColor, setTextColor] = useState(localStorage.getItem("text-color") || "#FFFFFF");
@@ -542,7 +474,7 @@ export default function Island() {
 
   const handleWeatherUnitChange = (e) => {
     const value = e.target.value === "c" ? "c" : "f";
-    setweatherUnit(value);
+    setWeatherUnit(value);
     localStorage.setItem("weather-unit", value);
   };
 
@@ -790,31 +722,6 @@ export default function Island() {
       setMode('large')
     }
   }, [mode, standbyBorderEnabled, largeStandbyEnabled])
-
-  // Get Weather
-  useEffect(() => {
-    const getWeather = async () => {
-      try {
-        const response = await fetch(
-          `https://api.weatherapi.com/v1/current.json?key=0b18c67c443543e0a6045401250911&q=${localStorage.getItem(
-            "location"
-          )}&aqi=no`
-        );
-        const data = await response.json();
-        const unit = localStorage.getItem("weather-unit");
-        const key = unit === "f" ? "temp_f" : "temp_c";
-        setWeather({
-          temp: Math.round(data?.current?.[key]),
-          status: data?.current?.condition?.text || ""
-        });
-      } catch (e) {
-        console.error("Weather fetch failed", e);
-      }
-    };
-    getWeather();
-    const interval = setInterval(getWeather, 600000); // Update every 10 mins
-    return () => clearInterval(interval);
-  }, []);
 
   // Set theme
   useEffect(() => {
