@@ -250,6 +250,43 @@ export default function Island() {
     return () => window.removeEventListener("resize", syncLinuxWindowShape);
   }, []);
 
+  useEffect(() => {
+    const handleGlobalDragStart = () => {
+      isDraggingRef.current = true;
+      setIsDragging(true);
+    };
+
+    const handleGlobalDragEnd = () => {
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      suppressClick.current = true;
+      setTimeout(() => {
+        suppressClick.current = false;
+        const island = islandElementRef.current;
+        if (island && !island.matches(":hover")) {
+          setIsHovered(false);
+          const activeTag = document.activeElement?.tagName;
+          if (activeTag !== "INPUT" && activeTag !== "TEXTAREA") {
+            if (standbyBorderEnabled) {
+              setMode("quick");
+            } else if (largeStandbyEnabled) {
+              setMode("large");
+            } else {
+              setMode("still");
+            }
+          }
+        }
+      }, 150);
+    };
+
+    window.addEventListener("dragstart", handleGlobalDragStart, true);
+    window.addEventListener("dragend", handleGlobalDragEnd, true);
+    return () => {
+      window.removeEventListener("dragstart", handleGlobalDragStart, true);
+      window.removeEventListener("dragend", handleGlobalDragEnd, true);
+    };
+  }, [standbyBorderEnabled, largeStandbyEnabled]);
+
   const maxAllowedWidth = Number(mediaMaxIslandWidth) || 360;
   const nowPlayingText = spotifyTrack?.name ? `${spotifyTrack.name}${spotifyTrack.artist ? ` • ${spotifyTrack.artist}` : ""}` : "";
   const textWidth = measureTextWidth(nowPlayingText) || (nowPlayingText.length * 7);

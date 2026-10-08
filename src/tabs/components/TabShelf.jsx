@@ -35,22 +35,31 @@ export function TabShelf({ shelf }) {
   };
 
   const handleItemDragStart = (e, item) => {
-    if (window.electronAPI?.startDrag) {
+    e.dataTransfer.setData("ripple-shelf-drag", "1");
+
+    if (item.type === "text" || item.type === "url") {
+      const textData = item.content || "";
+      e.dataTransfer.setData("text/plain", textData);
+      e.dataTransfer.setData("text", textData);
+      if (item.type === "url") {
+        e.dataTransfer.setData("text/uri-list", textData);
+      }
+      e.dataTransfer.effectAllowed = "copyMove";
+      return;
+    }
+
+    if (item.path && window.electronAPI?.startDrag) {
       e.preventDefault();
       window.electronAPI.startDrag({
         file: item.path,
         path: item.path,
-        content: item.content || item.preview,
         name: item.name,
         type: item.type,
       });
       return;
     }
 
-    e.dataTransfer.setData("ripple-shelf-drag", "1");
-    if (item.type === "text" || item.type === "url") {
-      e.dataTransfer.setData("text/plain", item.content || "");
-    } else if (item.path) {
+    if (item.path) {
       e.dataTransfer.setData("text/plain", item.path);
       e.dataTransfer.setData("text/uri-list", `file://${item.path}`);
     }
@@ -97,7 +106,13 @@ export function TabShelf({ shelf }) {
                 className="shelf-row"
                 key={item.id}
                 draggable
-                onDragStart={(e) => handleItemDragStart(e, item)}
+                onDragStart={(e) => {
+                  if (e.target.closest("button")) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleItemDragStart(e, item);
+                }}
               >
                 {/* Left Preview / Icon */}
                 <div className="shelf-item-preview">
