@@ -7,38 +7,9 @@ import "./App.css";
 import { TABS } from "./constants/tabs";
 import { openApp, openMusicPlayer } from "./utils/launcher";
 import { useWeather } from "./hooks/useWeather";
-
-//Get Date
-function formatDateShort(input) {
-  const date = input ? new Date(input) : new Date();
-  if (isNaN(date.getTime())) {
-    throw new Error("Invalid date provided to formatDateShort");
-  }
-  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
-  const month = date.toLocaleDateString(undefined, { month: "short" });
-  const day = date.getDate();
-  return `${weekday}, ${month} ${day}`;
-}
-
-const textMeasureCanvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
-function measureTextWidth(text, font = "600 13px OpenRunde, Arial, sans-serif") {
-  if (!textMeasureCanvas || !textMeasureCanvas.getContext) return null;
-  const ctx = textMeasureCanvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.font = font;
-  return ctx.measureText(text).width;
-}
-
-const WeatherIcon = ({ status, size = 16, color = "currentColor" }) => {
-  const s = status?.toLowerCase() || "";
-  if (s.includes("sunny") || s.includes("clear")) return <Sun size={size} color={color} />;
-  if (s.includes("partly cloudy")) return <CloudSun size={size} color={color} />;
-  if (s.includes("cloudy") || s.includes("overcast") || s.includes("mist") || s.includes("fog")) return <Cloud size={size} color={color} />;
-  if (s.includes("rain") || s.includes("drizzle") || s.includes("showers")) return <CloudRain size={size} color={color} />;
-  if (s.includes("snow") || s.includes("sleet") || s.includes("ice") || s.includes("blizzard")) return <CloudSnow size={size} color={color} />;
-  if (s.includes("thunder") || s.includes("storm")) return <CloudLightning size={size} color={color} />;
-  return <Sun size={size} color={color} />;
-};
+import { formatDateShort } from "./utils/format";
+import { measureTextWidth } from "./utils/ui";
+import { WeatherIcon } from "./ui/icons";
 
 export default function Island() {
   const islandElementRef = useRef(null);
