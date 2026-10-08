@@ -11,10 +11,30 @@ export function useBattery() {
   useEffect(() => {
     let battery;
     let handler;
+    let intervalId;
+
+    const queryNativeBattery = async () => {
+      if (window.electronAPI?.getBatteryStatus) {
+        try {
+          const status = await window.electronAPI.getBatteryStatus();
+          if (status && typeof status.percent === "number") {
+            setPercent(status.percent);
+            setCharging(Boolean(status.charging));
+            return true;
+          }
+        } catch (_) {}
+      }
+      return false;
+    };
 
     (async () => {
+      const nativeHandled = await queryNativeBattery();
+      if (nativeHandled) {
+        intervalId = setInterval(queryNativeBattery, 10000);
+        return;
+      }
+
       if (!("getBattery" in navigator)) {
-        setPercent("Battery not supported");
         return;
       }
       try {
@@ -27,12 +47,11 @@ export function useBattery() {
         update();
         battery.addEventListener("chargingchange", handler);
         battery.addEventListener("levelchange", handler);
-      } catch {
-        setPercent("Battery unavailable");
-      }
+      } catch (_) {}
     })();
 
     return () => {
+      if (intervalId) clearInterval(intervalId);
       if (battery && handler) {
         battery.removeEventListener("levelchange", handler);
         battery.removeEventListener("chargingchange", handler);

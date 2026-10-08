@@ -280,12 +280,12 @@ export function QuickView({
               alignItems: "center",
             }}
           >
-            {alert ? `${percent}%` : chargingAlert ? `${percent}%` : standbyBorderEnabled ? `${percent}%` : cameraAlert ? "Camera" : microphoneAlert ? "Microphone" : bluetoothAlert ? "Connected" : weather.temp ? (
+            {alert && percent != null ? `${percent}%` : chargingAlert && percent != null ? `${percent}%` : standbyBorderEnabled && percent != null ? `${percent}%` : cameraAlert ? "Camera" : microphoneAlert ? "Microphone" : bluetoothAlert ? "Connected" : weather?.temp ? (
               <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                 <WeatherIcon status={weather.status} size={14} color={textColor} />
                 <span>{weather.temp}º</span>
               </div>
-            ) : `${percent}%`}
+            ) : percent != null ? `${percent}%` : ""}
           </h1>
         </motion.div>
       )}

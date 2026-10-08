@@ -9,9 +9,12 @@ Emits JSON lines to stdout:
 """
 
 import sys
+import os
 import json
 import subprocess
 import glob
+import base64
+import urllib.parse
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
@@ -23,6 +26,22 @@ system_bus = None
 
 last_media_json = None
 last_devices = {"camera": False, "microphone": False, "bluetooth": False}
+
+def normalize_artwork_url(art_url):
+    if not art_url:
+        return None
+    if art_url.startswith("file://"):
+        try:
+            local_path = urllib.parse.unquote(art_url[7:])
+            if os.path.exists(local_path) and os.path.getsize(local_path) < 5 * 1024 * 1024:
+                with open(local_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("ascii")
+                    ext = os.path.splitext(local_path)[1].lower().replace(".", "") or "jpeg"
+                    mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+                    return f"data:{mime};base64,{b64}"
+        except Exception:
+            return None
+    return art_url
 
 def emit(event_type, data):
     try:
@@ -52,11 +71,12 @@ def parse_media_track():
                 artist = ", ".join([str(a) for a in artist_list]) if artist_list else ""
                 album = str(meta.get("xesam:album", ""))
                 art_url = str(meta.get("mpris:artUrl", ""))
+                normalized_art = normalize_artwork_url(art_url)
                 data = {
                     "name": title,
                     "artist": artist,
                     "album": album,
-                    "artwork_url": art_url or None,
+                    "artwork_url": normalized_art or None,
                     "state": "playing" if status.lower() == "playing" else "paused",
                     "source": name.replace("org.mpris.MediaPlayer2.", "")
                 }
@@ -71,23 +91,34 @@ def parse_media_track():
         return None
 
 def check_and_emit_media():
-    global last_media_json
-    media = parse_media_track()
-    serialized = json.dumps(media, sort_keys=True)
-    if serialized != last_media_json:
-        last_media_json = serialized
-        emit("media", media)
+    try:
+        global last_media_json
+        media = parse_media_track()
+        serialized = json.dumps(media, sort_keys=True)
+        if serialized != last_media_json:
+            last_media_json = serialized
+            emit("media", media)
+    except Exception:
+        pass
 
-def on_properties_changed(interface, changed, invalidated, path=None):
-    if interface == "org.mpris.MediaPlayer2.Player":
-        check_and_emit_media()
-    elif interface == "org.bluez.Device1":
-        if "Connected" in changed:
-            check_devices()
+def on_properties_changed(*args, **kwargs):
+    try:
+        interface = args[0] if len(args) > 0 else kwargs.get("interface", "")
+        changed = args[1] if len(args) > 1 else kwargs.get("changed", {})
+        if interface == "org.mpris.MediaPlayer2.Player":
+            check_and_emit_media()
+        elif interface == "org.bluez.Device1":
+            if isinstance(changed, dict) and "Connected" in changed:
+                check_devices()
+    except Exception:
+        pass
 
 def on_name_owner_changed(name, old_owner, new_owner):
-    if name.startswith("org.mpris.MediaPlayer2."):
-        check_and_emit_media()
+    try:
+        if name.startswith("org.mpris.MediaPlayer2."):
+            check_and_emit_media()
+    except Exception:
+        pass
 
 def check_bluetooth():
     global system_bus
