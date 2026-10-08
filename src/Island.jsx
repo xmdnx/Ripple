@@ -7,6 +7,7 @@ import "./App.css";
 import { TABS } from "./constants/tabs";
 import { openApp, openMusicPlayer } from "./utils/launcher";
 import { useWeather } from "./hooks/useWeather";
+import { useSetting } from "./hooks/useSetting";
 import { formatDateShort } from "./utils/format";
 import { measureTextWidth } from "./utils/ui";
 import { WeatherIcon } from "./ui/icons";
@@ -16,52 +17,46 @@ export default function Island() {
   const lastWindowShapeRef = useRef(null);
   const [time, setTime] = useState(null);
   const [mode, setMode] = useState("still");
-  const [tabOrder, setTabOrder] = useState(() => JSON.parse(localStorage.getItem("tab-order") || "[0,1,2,3,5,6,7]"));
-  const [hiddenTabs, setHiddenTabs] = useState(() => JSON.parse(localStorage.getItem("hidden-tabs") || "[]"));
-  const [defaultTabId, setDefaultTabId] = useState(() => Number(localStorage.getItem("default-tab") || 0));
 
+  const [tabOrder, setTabOrder] = useSetting("tabOrder");
+  const [hiddenTabs, setHiddenTabs] = useSetting("hiddenTabs");
+  const [defaultTabId, setDefaultTabId] = useSetting("defaultTab");
+  const [batteryAlertsEnabled, setBatteryAlertsEnabled] = useSetting("batteryAlerts");
+  const [islandBorderEnabled, setIslandBorderEnabled] = useSetting("islandBorder");
+  const [standbyBorderEnabled, setStandbyEnabled] = useSetting("standbyMode");
+  const [largeStandbyEnabled, setLargeStandbyEnabled] = useSetting("largeStandbyMode");
+  const [hideNotActiveIslandEnabled, sethideNotActiveIslandEnabled] = useSetting("hideNotActiveIsland");
+  const [showInfoWhenIdleEnabled, setShowInfoWhenIdleEnabled] = useSetting("showInfoWhenIdle");
+  const [hourFormatSetting, setHourFormatSetting] = useSetting("hourFormat");
+  const hourFormat = hourFormatSetting === "12-hr";
+  const [theme, setTheme] = useState("default");
+  const [bgColor, setBgColor] = useSetting("bgColor");
+  const [textColor, setTextColor] = useSetting("textColor");
+  const [bgImage, setBgImage] = useSetting("bgImage");
+  const [tasks, setTasks] = useSetting("tasks");
+  const [workflows, setWorkflows] = useSetting("workflows");
 
   const moveTabOrder = (fromIdx, toIdx) => {
     if (toIdx < 0 || toIdx >= tabOrder.length) return;
-    setTabOrder((prev) => {
-      const newOrder = [...prev];
-      const [moved] = newOrder.splice(fromIdx, 1);
-      newOrder.splice(toIdx, 0, moved);
-      localStorage.setItem("tab-order", JSON.stringify(newOrder));
-      return newOrder;
-    });
+    const newOrder = [...tabOrder];
+    const [moved] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, moved);
+    setTabOrder(newOrder);
   };
 
   const toggleTabVisibility = (id) => {
-    setHiddenTabs(prev => {
-      const newHidden = prev.includes(id)
-        ? prev.filter(t => t !== id)
-        : [...prev, id];
+    const newHidden = hiddenTabs.includes(id)
+      ? hiddenTabs.filter(t => t !== id)
+      : [...hiddenTabs, id];
 
-      // Don't allow hiding all tabs
-      if (newHidden.length >= TABS.length) return prev;
-
-      localStorage.setItem("hidden-tabs", JSON.stringify(newHidden));
-      return newHidden;
-    });
+    // Don't allow hiding all tabs
+    if (newHidden.length >= TABS.length) return;
+    setHiddenTabs(newHidden);
   };
 
   const [percent, setPercent] = useState(null);
   const [alert, setAlert] = useState(null);
-  const [batteryAlertsEnabled, setBatteryAlertsEnabled] = useState(localStorage.getItem("battery-alerts") !== "false");
-  const [islandBorderEnabled, setIslandBorderEnabled] = useState(localStorage.getItem("island-border") === "true");
-  const [standbyBorderEnabled, setStandbyEnabled] = useState(localStorage.getItem("standby-mode") === "true");
-  const [largeStandbyEnabled, setLargeStandbyEnabled] = useState(localStorage.getItem("large-standby-mode") === "true");
-  const [hideNotActiveIslandEnabled, sethideNotActiveIslandEnabled] = useState(localStorage.getItem("hide-island-notactive") === "true");
-  const [showInfoWhenIdleEnabled, setShowInfoWhenIdleEnabled] = useState(
-    localStorage.getItem("show-info-when-idle") === "true"
-  );
-  const [hourFormat, setHourFormat] = useState((localStorage.getItem("hour-format") || "12-hr") === "12-hr");
   const { weather, weatherUnit, setWeatherUnit } = useWeather();
-  const [theme, setTheme] = useState("default");
-  const [bgColor, setBgColor] = useState(localStorage.getItem("bg-color") || "#000000");
-  const [textColor, setTextColor] = useState(localStorage.getItem("text-color") || "#FFFFFF");
-  const [bgImage, setBgImage] = useState(localStorage.getItem("bg-image") || "none");
   const [browserSearch, setBrowserSearch] = useState("");
   const [clipboard, setClipboard] = useState([]);
   const [charging, setCharging] = useState(false);
@@ -76,9 +71,7 @@ export default function Island() {
   const captureAlertQueue = useRef([]);
   const captureAlertTimer = useRef(null);
   const captureAlertDisplayed = useRef({ camera: false, microphone: false });
-  const [tasks, setTasks] = useState(JSON.parse(localStorage.getItem("tasks") || "[]"));
   const [taskText, setTaskText] = useState("");
-  const [workflows, setWorkflows] = useState(JSON.parse(localStorage.getItem("workflows") || "[]"));
   const [workflowName, setWorkflowName] = useState("");
   const [workflowUrls, setWorkflowUrls] = useState("");
   const [isHovered, setIsHovered] = useState(false);
@@ -131,22 +124,12 @@ export default function Island() {
     setIsDragging(val);
   };
   const [displays, setDisplays] = useState([]);
-  const [currentDisplayId, setCurrentDisplayId] = useState(localStorage.getItem("display-id") || "");
-  const [weatherLocation, setWeatherLocation] = useState(localStorage.getItem("location") || "");
-  const [autoLaunchEnabled, setAutoLaunchEnabled] = useState(localStorage.getItem("auto-launch") === "true");
-  const [positionMode, setPositionMode] = useState(localStorage.getItem("position-mode") || localStorage.getItem("side-mode") || "free");
-
-  const [islandX, setIslandX] = useState(() => {
-    const saved = localStorage.getItem("island-x");
-    const num = Number(saved);
-    return (saved !== null && !isNaN(num)) ? Math.max(0, Math.min(100, num)) : 50;
-  });
-
-  const [islandY, setIslandY] = useState(() => {
-    const saved = localStorage.getItem("island-y");
-    const num = Number(saved);
-    return (saved !== null && !isNaN(num)) ? Math.max(0, Math.min(1000, num)) : 20;
-  });
+  const [currentDisplayId, setCurrentDisplayId] = useSetting("targetDisplay");
+  const [weatherLocation, setWeatherLocation] = useSetting("weatherLocation");
+  const [autoLaunchEnabled, setAutoLaunchEnabled] = useSetting("autoLaunch");
+  const [positionMode, setPositionMode] = useSetting("positionMode");
+  const [islandX, setIslandX] = useSetting("islandX");
+  const [islandY, setIslandY] = useSetting("islandY");
 
   const tabVariants = {
     enter: (direction) => ({
@@ -297,10 +280,8 @@ export default function Island() {
           : 170;
   let height = mode === "large" ? (currentTab === 7 ? (positionMode === "free" ? 425 : 345) : currentTab === 6 ? 250 : currentTab === 3 ? 150 : currentTab === 0 ? 120 : currentTab === 1 ? 210 : 190) : 40;
 
-  const normalizeApps = (arr) => arr.map(a => typeof a === 'string' ? { name: a, launch: a } : a);
-  const [quickApps, setQuickApps] = useState(() =>
-    normalizeApps(JSON.parse(localStorage.getItem("quick-apps") || '["Notes", "Spotify", "Calculator", "Terminal"]'))
-  );
+  const [quickApps, setQuickApps] = useSetting("quickApps");
+  const [newUser, setNewUser] = useSetting("newUser");
   const [newQuickApp, setNewQuickApp] = useState("");
   const [appSuggestions, setAppSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -314,9 +295,8 @@ export default function Island() {
   }, []);
 
   useEffect(() => {
-    const savedDisplayId = localStorage.getItem("display-id");
-    if (savedDisplayId && window.electronAPI?.setDisplay) {
-      window.electronAPI.setDisplay(savedDisplayId);
+    if (currentDisplayId && window.electronAPI?.setDisplay) {
+      window.electronAPI.setDisplay(currentDisplayId);
     }
 
     if (window.electronAPI?.updateWindowPosition) {
@@ -327,139 +307,64 @@ export default function Island() {
       window.electronAPI.setAutoLaunch(autoLaunchEnabled);
     }
 
-    if (!localStorage.getItem('newuser')) {
-      localStorage.setItem('newuser', 'true');
-    }
-
-    if (localStorage.getItem('newuser') === 'true') {
+    if (newUser) {
       const timer = setTimeout(() => {
         window.electronAPI?.openExternal ? window.electronAPI.openExternal("https://github.com/TopMyster/Ripple/blob/main/instructions.md") : window.open("https://github.com/TopMyster/Ripple/blob/main/instructions.md", "_blank");
-        localStorage.setItem('newuser', 'false');
+        setNewUser(false);
       }, 3000);
       return () => clearTimeout(timer);
     }
   }, []);
 
-  // localStorage defaults
-  if (!localStorage.getItem("battery-alerts")) {
-    localStorage.setItem("battery-alerts", "true");
-  }
-
-  if (!localStorage.getItem("default-tab")) {
-    localStorage.setItem("default-tab", "2");
-  }
-
-  if (!localStorage.getItem("island-border")) {
-    localStorage.setItem("island-border", "false");
-  }
-
-  if (!localStorage.getItem("hide-island-notactive")) {
-    localStorage.setItem("hide-island-notactive", "false");
-  }
-
-  if (!localStorage.getItem("standby-mode")) {
-    localStorage.setItem("standby-mode", "false");
-  }
-
-  if (!localStorage.getItem("hour-format")) {
-    localStorage.setItem("hour-format", "12-hr");
-  }
-
-  if (!localStorage.getItem("island-x")) {
-    localStorage.setItem("island-x", "50");
-  }
-
-  if (!localStorage.getItem("island-y")) {
-    localStorage.setItem("island-y", "20");
-  }
-
-  if (!localStorage.getItem("bg-color")) {
-    localStorage.setItem("bg-color", "#000000");
-  }
-
-  if (!localStorage.getItem("text-color")) {
-    localStorage.setItem("text-color", "#FFFFFF");
-  }
-
-  if (!localStorage.getItem("weather-unit")) {
-    localStorage.setItem("weather-unit", "f");
-  }
-
-  if (!localStorage.getItem("auto-launch")) {
-    localStorage.setItem("auto-launch", "false");
-  }
-
   const handleBatteryAlertsChange = (e) => {
-    const value = e.target.value === "true";
-    setBatteryAlertsEnabled(value);
-    localStorage.setItem("battery-alerts", value ? "true" : "false");
+    setBatteryAlertsEnabled(e.target.value === "true");
   };
 
   const handleIslandBorderChange = (e) => {
-    const value = e.target.value === "true";
-    setIslandBorderEnabled(value);
-    localStorage.setItem("island-border", value ? "true" : "false");
+    setIslandBorderEnabled(e.target.value === "true");
   };
 
   const handleStandbyChange = (e) => {
-    const value = e.target.value === "true";
-    setStandbyEnabled(value);
-    localStorage.setItem("standby-mode", value ? "true" : "false");
+    setStandbyEnabled(e.target.value === "true");
   };
 
   const handleLargeStandbyChange = (e) => {
-    const value = e.target.value === "true";
-    setLargeStandbyEnabled(value);
-    localStorage.setItem("large-standby-mode", value ? "true" : "false");
+    setLargeStandbyEnabled(e.target.value === "true");
   };
 
   const handleHourFormatChange = (e) => {
-    const value = e.target.value;
-    setHourFormat(value === "12-hr");
-    localStorage.setItem("hour-format", value);
+    setHourFormatSetting(e.target.value);
   };
 
   const handleAutoLaunchChange = (e) => {
     const value = e.target.value === "true";
     setAutoLaunchEnabled(value);
-    localStorage.setItem("auto-launch", value ? "true" : "false");
-    window.electronAPI?.setAutoLaunch(value);
+    window.electronAPI?.setAutoLaunch?.(value);
   };
 
   const handlehideNotActiveIslandChange = (e) => {
-    const value = e.target.value === "true";
-    sethideNotActiveIslandEnabled(value);
-    localStorage.setItem("hide-island-notactive", value ? "true" : "false");
+    sethideNotActiveIslandEnabled(e.target.value === "true");
   };
 
   const handleShowInfoWhenIdleChange = (e) => {
-    const value = e.target.value === "true";
-    setShowInfoWhenIdleEnabled(value);
-    localStorage.setItem("show-info-when-idle", value ? "true" : "false");
+    setShowInfoWhenIdleEnabled(e.target.value === "true");
   };
 
   const handleWeatherUnitChange = (e) => {
-    const value = e.target.value === "c" ? "c" : "f";
-    setWeatherUnit(value);
-    localStorage.setItem("weather-unit", value);
+    setWeatherUnit(e.target.value === "c" ? "c" : "f");
   };
 
   const handleBgColorChange = (e) => {
-    const value = e.target.value;
-    setBgColor(value);
-    localStorage.setItem("bg-color", value);
+    setBgColor(e.target.value);
   };
 
   const handleTextColorChange = (e) => {
-    const value = e.target.value;
-    setTextColor(value);
-    localStorage.setItem("text-color", value);
+    setTextColor(e.target.value);
   };
 
   const handleDisplayChange = (e) => {
     const displayId = e.target.value;
     setCurrentDisplayId(displayId);
-    localStorage.setItem("display-id", displayId);
     if (window.electronAPI?.setDisplay) {
       window.electronAPI.setDisplay(displayId);
     }
@@ -478,8 +383,7 @@ export default function Island() {
   };
 
   const savePosition = () => {
-    localStorage.setItem("island-x", islandX);
-    localStorage.setItem("island-y", islandY);
+    // Already tracked in reactive store
   };
 
   useEffect(() => {
@@ -489,16 +393,13 @@ export default function Island() {
   }, [currentTab]);
 
   const handleBgImageChange = (e) => {
-    const value = e.target.value;
-    setBgImage(value);
-    localStorage.setItem("bg-image", value);
+    setBgImage(e.target.value);
   };
 
   const handleQaChange = (index, value) => {
     const updatedApps = [...quickApps];
     updatedApps[index] = { name: value, launch: value };
     setQuickApps(updatedApps);
-    localStorage.setItem("quick-apps", JSON.stringify(updatedApps));
   };
 
   const addQuickApp = () => {
@@ -506,7 +407,6 @@ export default function Island() {
       const entry = selectedAppRef.current || { name: newQuickApp.trim(), launch: newQuickApp.trim() };
       const updatedApps = [...quickApps, entry];
       setQuickApps(updatedApps);
-      localStorage.setItem("quick-apps", JSON.stringify(updatedApps));
       setNewQuickApp("");
       selectedAppRef.current = null;
       setShowSuggestions(false);
@@ -516,7 +416,6 @@ export default function Island() {
   const removeQuickApp = (index) => {
     const updatedApps = quickApps.filter((_, i) => i !== index);
     setQuickApps(updatedApps);
-    localStorage.setItem("quick-apps", JSON.stringify(updatedApps));
   };
 
   // Get battery info
@@ -551,7 +450,7 @@ export default function Island() {
   useEffect(() => {
     if (
       (percent === 20 || percent === 15 || percent === 10 || percent === 5 || percent === 3) &&
-      localStorage.getItem("battery-alerts") === "true"
+      batteryAlertsEnabled
     ) {
       setMode("quick");
       setAlert(true);
@@ -563,12 +462,12 @@ export default function Island() {
         clearTimeout(timerId);
       };
     }
-  }, [percent]);
+  }, [percent, batteryAlertsEnabled]);
 
   useEffect(() => {
     if (
-      (charging === true) &&
-      localStorage.getItem("battery-alerts") === "true"
+      charging === true &&
+      batteryAlertsEnabled
     ) {
       setMode("quick");
       setChargingAlert(true);
@@ -580,7 +479,7 @@ export default function Island() {
         clearTimeout(timerId);
       };
     }
-  }, [charging]);
+  }, [charging, batteryAlertsEnabled]);
 
 
   // Get time
@@ -608,29 +507,18 @@ export default function Island() {
   // Set theme
   useEffect(() => {
     if (theme === "sleek-black") {
-      localStorage.setItem("bg-color", "rgba(0, 0, 0, 0.64)");
-      localStorage.setItem("text-color", "rgba(255, 255, 255)");
       setBgColor("rgba(0, 0, 0, 0.64)");
       setTextColor("rgba(255, 255, 255)");
     } else if (theme === "win95") {
-      localStorage.setItem("bg-color", "rgba(195, 195, 195)");
-      localStorage.setItem("text-color", "rgba(0, 0, 0)");
       setBgColor("rgba(195, 195, 195)");
       setTextColor("rgba(0, 0, 0)");
     } else if (theme === "invisible") {
-      localStorage.setItem("bg-image", "none");
       setBgImage("none");
-      localStorage.setItem("bg-color", "rgba(255, 255, 255, 0)");
-      localStorage.setItem("text-color", "rgba(0, 0, 0, 0)");
       setBgColor("rgba(255, 255, 255, 0)");
       setTextColor("rgba(0, 0, 0, 0)");
     } else if (theme === "none") {
-      const defaultBg = "#000000";
-      const defaultText = "#FFFFFF";
-      localStorage.setItem("bg-color", defaultBg);
-      localStorage.setItem("text-color", defaultText);
-      setBgColor(defaultBg);
-      setTextColor(defaultText);
+      setBgColor("#000000");
+      setTextColor("#FFFFFF");
     }
   }, [theme]);
 
@@ -818,8 +706,6 @@ export default function Island() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => localStorage.setItem("tasks", JSON.stringify(tasks)), [tasks]);
-
   function copyToClipboard(text) {
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       return navigator.clipboard.writeText(text);
@@ -828,13 +714,13 @@ export default function Island() {
 
   function addTask() {
     if (taskText.trim()) {
-      setTasks((prev) => [...prev, taskText.trim()]);
+      setTasks([...tasks, taskText.trim()]);
       setTaskText("");
     }
   }
 
   function removeTask(index) {
-    setTasks((prev) => prev.filter((_, i) => i !== index));
+    setTasks(tasks.filter((_, i) => i !== index));
   }
 
   async function openWorkflow(workflow) {
@@ -851,7 +737,6 @@ export default function Island() {
       const newWorkflow = { name: workflowName.trim(), urls: urls };
       const updatedWorkflows = [...workflows, newWorkflow];
       setWorkflows(updatedWorkflows);
-      localStorage.setItem("workflows", JSON.stringify(updatedWorkflows));
       setWorkflowName("");
       setWorkflowUrls("");
     }
@@ -860,7 +745,6 @@ export default function Island() {
   function removeWorkflow(index) {
     const updatedWorkflows = workflows.filter((_, i) => i !== index);
     setWorkflows(updatedWorkflows);
-    localStorage.setItem("workflows", JSON.stringify(updatedWorkflows));
   }
 
   // Keyboard Shortcuts and Navigation
@@ -1457,7 +1341,7 @@ export default function Island() {
                   <div
                     id="battery-bar"
                     style={{
-                      backgroundColor: localStorage.getItem('text-color'),
+                      backgroundColor: textColor,
                       color: bgColor
                     }}
                   >
@@ -1897,7 +1781,6 @@ export default function Island() {
                               className="tab-order-btn"
                               onClick={() => {
                                 setDefaultTabId(id);
-                                localStorage.setItem("default-tab", id);
                               }}
                               title="Set as default"
                               style={{ opacity: defaultTabId === id ? 1 : 0.3, color: defaultTabId === id ? '#FFD700' : textColor }}
@@ -1964,7 +1847,6 @@ export default function Island() {
                             checked={positionMode === mode.val}
                             onChange={(e) => {
                               setPositionMode(e.target.value);
-                              localStorage.setItem("position-mode", e.target.value);
                             }}
                           />
                           <span className="radio-custom"></span>
@@ -1981,7 +1863,6 @@ export default function Island() {
                         checked={positionMode === "free"}
                         onChange={(e) => {
                           setPositionMode(e.target.value);
-                          localStorage.setItem("position-mode", e.target.value);
                         }}
                       />
                       <span className="radio-custom"></span>
@@ -2138,7 +2019,6 @@ export default function Island() {
                       value={weatherLocation}
                       onChange={(e) => {
                         setWeatherLocation(e.target.value);
-                        localStorage.setItem("location", e.target.value);
                       }}
                     />
                   </div>
