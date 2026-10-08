@@ -16,7 +16,7 @@ export default function Island() {
   const lastWindowShapeRef = useRef(null);
   const [time, setTime] = useState(null);
   const [mode, setMode] = useState("still");
-  const [tabOrder, setTabOrder] = useState(() => JSON.parse(localStorage.getItem("tab-order") || "[0,1,2,3,4,5,6,7]"));
+  const [tabOrder, setTabOrder] = useState(() => JSON.parse(localStorage.getItem("tab-order") || "[0,1,2,3,5,6,7]"));
   const [hiddenTabs, setHiddenTabs] = useState(() => JSON.parse(localStorage.getItem("hidden-tabs") || "[]"));
   const [defaultTabId, setDefaultTabId] = useState(() => Number(localStorage.getItem("default-tab") || 0));
 
@@ -46,11 +46,8 @@ export default function Island() {
     });
   };
 
-  const [asked, setAsked] = useState(false);
-  const [aiAnswer, setAIAnswer] = useState(null);
   const [percent, setPercent] = useState(null);
   const [alert, setAlert] = useState(null);
-  const [userText, setUserText] = useState("");
   const [batteryAlertsEnabled, setBatteryAlertsEnabled] = useState(localStorage.getItem("battery-alerts") !== "false");
   const [islandBorderEnabled, setIslandBorderEnabled] = useState(localStorage.getItem("island-border") === "true");
   const [standbyBorderEnabled, setStandbyEnabled] = useState(localStorage.getItem("standby-mode") === "true");
@@ -84,8 +81,6 @@ export default function Island() {
   const [workflows, setWorkflows] = useState(JSON.parse(localStorage.getItem("workflows") || "[]"));
   const [workflowName, setWorkflowName] = useState("");
   const [workflowUrls, setWorkflowUrls] = useState("");
-  const [aiProvider, setAiProvider] = useState(localStorage.getItem("ai-provider") || "groq");
-  const [aiModel, setAiModel] = useState(localStorage.getItem("ai-model") || "llama-3.3-70b-versatile");
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [albumHovered, setAlbumHovered] = useState(false);
@@ -94,6 +89,7 @@ export default function Island() {
   // Tab calculations
   const isMusicActive = !!spotifyTrack;
   const visibleTabs = tabOrder.filter(id => {
+    if (!TABS.some(t => t.id === id)) return false;
     if (hiddenTabs.includes(id)) return false;
     if (id === 3 && !isMusicActive) return false;
     return true;
@@ -105,7 +101,6 @@ export default function Island() {
   });
 
   const currentTab = currentTabId;
-  const totalTabs = visibleTabs.length;
 
   const [showPausedQuickView, setShowPausedQuickView] = useState(false);
   const pausedTimeout = useRef(null);
@@ -523,90 +518,6 @@ export default function Island() {
     setQuickApps(updatedApps);
     localStorage.setItem("quick-apps", JSON.stringify(updatedApps));
   };
-
-  // AI feature 
-  async function askAI() {
-    try {
-      const apiKey = (localStorage.getItem("api-key") || "").trim();
-      const provider = localStorage.getItem("ai-provider") || "groq";
-      const model = localStorage.getItem("ai-model") || (provider === "groq" ? "llama-3.3-70b-versatile" : "meta-llama/llama-3.3-70b-instruct");
-
-      if (!apiKey) {
-        setAIAnswer("Enter your API key in settings");
-        return;
-      }
-
-      setAIAnswer("");
-
-      const baseUrl = provider === "groq" ? "https://api.groq.com/openai/v1" : "https://openrouter.ai/api/v1";
-
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          ...(provider === "openrouter" && {
-            "HTTP-Referer": "https://github.com/TopMyster/Ripple",
-            "X-Title": "Ripple"
-          })
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            {
-              role: "system",
-              content: "You are Ripple, a sleek and helpful desktop AI assistant. Your goal is to provide accurate, concise, and beautifully formatted answers that fit well in a compact desktop widget. \n- For general inquiries: Keep it to 2-4 sentences.\n- For complex or code-related questions: Provide detailed answers with Markdown code blocks, but stay as efficient as possible.\n- Use Markdown for bolding, lists, and headers to make information easy to scan."
-            },
-            {
-              role: "user",
-              content: userText
-            }
-          ],
-          temperature: 1,
-          stream: true
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            if (line.includes("[DONE]")) break;
-            try {
-              const data = JSON.parse(line.slice(6));
-              const delta = data.choices[0]?.delta?.content || "";
-              if (delta) {
-                fullText += delta;
-                setAIAnswer((prev) => (prev ? prev + delta : delta));
-              }
-            } catch (e) {
-              console.error("Error parsing AI response:", e);
-            }
-          }
-        }
-      }
-
-      if (!fullText) {
-        setAIAnswer("No response received. Check your settings.");
-      }
-    } catch (err) {
-      setAIAnswer(`Error: ${err.message}`);
-      console.error("askAI error:", err);
-    }
-  }
 
   // Get battery info
   useEffect(() => {
@@ -1780,197 +1691,6 @@ export default function Island() {
               </div>
             )}
 
-            {/* AI tab container */}
-            {currentTab === 4 && (
-              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <AnimatePresence mode="wait">
-                  {!asked ? (
-                    <motion.div
-                      key="ask"
-                      initial={{ opacity: 0, filter: "blur(10px)" }}
-                      animate={{ opacity: 1, filter: "blur(0px)" }}
-                      exit={{ opacity: 0, filter: "blur(10px)" }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "stretch",
-                        justifyContent: "flex-start",
-                        padding: "10px",
-                        boxSizing: "border-box"
-                      }}
-                    >
-                      <textarea
-                        id="userinput"
-                        placeholder="Ask Anything"
-                        value={userText}
-                        onChange={(e) => setUserText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            setAsked(true);
-                            askAI();
-                          }
-                        }}
-                        style={{
-                          color: `${textColor}`,
-                          fontFamily: theme === "win95" ? "w95" : "OpenRunde",
-                          pointerEvents: "auto",
-                          animation: 'none'
-                        }}
-                      />
-                      <button
-                        id="chatsubmit"
-                        onClick={() => {
-                          setAsked(true);
-                          askAI();
-                        }}
-                        style={{
-                          backgroundColor: textColor,
-                          color: bgColor,
-                          fontFamily: theme === "win95" ? "w95" : "OpenRunde",
-                          pointerEvents: "auto",
-                          animation: 'none'
-                        }}
-                      >
-                        Ask
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="result"
-                      initial={{ opacity: 0, filter: "blur(10px)" }}
-                      animate={{ opacity: 1, filter: "blur(0px)" }}
-                      exit={{ opacity: 0, filter: "blur(10px)" }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "stretch",
-                        justifyContent: "flex-start",
-                        padding: "0 10px",
-                        boxSizing: "border-box",
-                        overflow: "hidden"
-                      }}
-                    >
-                      <div
-                        id="result"
-                        style={{
-                          fontWeight: 400,
-                          fontFamily: theme === "win95" ? "w95" : "OpenRunde",
-                          pointerEvents: "auto",
-                          animation: 'none',
-                          margin: 0,
-                          paddingTop: "40px",
-                          paddingBottom: "50px",
-                          maxHeight: "100%",
-                          overflowY: "auto"
-                        }}
-                      >
-                        {aiAnswer ? (
-                          <ReactMarkdown
-                            components={{
-                              pre: ({ node, children, ...props }) => {
-                                const codeContent = node.children[0]?.children[0]?.value || "";
-                                return (
-                                  <div style={{
-                                    position: 'relative',
-                                    margin: '10px 0',
-                                    backgroundColor: `color-mix(in srgb, ${textColor}, transparent 92%)`,
-                                    borderRadius: '8px',
-                                    border: `1px solid color-mix(in srgb, ${textColor}, transparent 90%)`
-                                  }}>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigator.clipboard.writeText(codeContent);
-                                        const btn = e.currentTarget;
-                                        const originalText = btn.innerText;
-                                        btn.innerText = "Copied!";
-                                        btn.style.backgroundColor = 'rgba(52, 199, 89, 0.4)';
-                                        setTimeout(() => {
-                                          btn.innerText = originalText;
-                                          btn.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
-                                        }, 2000);
-                                      }}
-                                      style={{
-                                        position: 'absolute',
-                                        top: '6px',
-                                        right: '6px',
-                                        zIndex: 10,
-                                        backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                                        border: 'none',
-                                        borderRadius: '5px',
-                                        color: textColor,
-                                        fontSize: '10px',
-                                        padding: '3px 7px',
-                                        cursor: 'pointer',
-                                        backdropFilter: 'blur(4px)',
-                                        fontWeight: 600,
-                                        transition: 'all 0.2s ease'
-                                      }}
-                                    >
-                                      Copy
-                                    </button>
-                                    <pre {...props} style={{ margin: 0, padding: '12px', background: 'none' }}>{children}</pre>
-                                  </div>
-                                );
-                              },
-                              code: ({ node, inline, ...props }) => (
-                                <code
-                                  {...props}
-                                  style={{
-                                    backgroundColor: inline ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                    padding: inline ? '2px 5px' : '0',
-                                    borderRadius: inline ? '4px' : '0',
-                                    fontFamily: 'monospace',
-                                    fontSize: inline ? '0.9em' : '1em'
-                                  }}
-                                />
-                              )
-                            }}
-                          >
-                            {aiAnswer}
-                          </ReactMarkdown>
-                        ) : (
-                          <span style={{ opacity: 0.5, fontStyle: "italic" }}>
-                            Thinking...
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => {
-                          setAsked(false);
-                          setAIAnswer(null);
-                          setUserText("");
-                        }}
-                        id="Askanotherbtn"
-                        style={{
-                          position: "absolute",
-                          bottom: 15,
-                          right: 15,
-                          backgroundColor: textColor,
-                          color: bgColor,
-                          fontFamily: theme === "win95" ? "w95" : "OpenRunde",
-                          pointerEvents: "auto",
-                          animation: 'none',
-                          zIndex: 999,
-                          cursor: "pointer"
-                        }}
-                      >
-                        Ask another
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-
             {/*Clipboard*/}
             {currentTab === 5 && (
               <div id="clipboard" style={{ animation: 'none' }}>
@@ -2133,6 +1853,7 @@ export default function Island() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {tabOrder.map((id, i) => {
                       const tabDef = TABS.find(t => t.id === id);
+                      if (!tabDef) return null;
                       const isHidden = hiddenTabs.includes(id);
                       return (
                         <div
@@ -2545,47 +2266,6 @@ export default function Island() {
                         </motion.div>
                       ))}
                     </AnimatePresence>
-                  </div>
-                </div>
-
-                <div className="settings-section" style={{ marginBottom: 30 }}>
-                  <h3 style={{ fontSize: 13, textTransform: 'uppercase', opacity: 0.5, letterSpacing: '0.05em' }}>Integrations</h3>
-                  <div className="settings-row">
-                    <span className="settings-label">AI Provider</span>
-                    <select
-                      value={aiProvider}
-                      onChange={(e) => {
-                        setAiProvider(e.target.value);
-                        localStorage.setItem("ai-provider", e.target.value);
-                        const model = e.target.value === "groq" ? "llama-3.3-70b-versatile" : "meta-llama/llama-3.3-70b-instruct";
-                        setAiModel(model);
-                        localStorage.setItem("ai-model", model);
-                      }}
-                    >
-                      <option value="groq">Groq</option>
-                      <option value="openrouter">OpenRouter</option>
-                    </select>
-                  </div>
-                  <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <span className="settings-label">AI Model</span>
-                    <input
-                      className="select-input"
-                      value={aiModel}
-                      placeholder={aiProvider === "groq" ? "llama-3.3-70b-versatile" : "meta-llama/llama-3.3-70b-instruct"}
-                      onChange={(e) => {
-                        setAiModel(e.target.value);
-                        localStorage.setItem("ai-model", e.target.value);
-                      }}
-                    />
-                  </div>
-                  <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <span className="settings-label">API Key</span>
-                    <input
-                      className="select-input"
-                      type="password"
-                      placeholder={aiProvider === "groq" ? "gsk_..." : "sk-or-..."}
-                      onChange={(e) => localStorage.setItem("api-key", e.target.value)}
-                    />
                   </div>
                 </div>
 
