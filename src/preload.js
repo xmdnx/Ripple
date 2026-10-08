@@ -20,5 +20,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateWindowPosition: (xPerc, yPx) => ipcRenderer.invoke('update-window-position', xPerc, yPx),
   setAutoLaunch: (enable) => process.platform !== 'darwin' ? ipcRenderer.invoke('set-auto-launch', enable) : Promise.resolve(),
   focusWindow: () => ipcRenderer.invoke('focus-window'),
+  onSystemMediaUpdated: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('system-media-updated', handler);
+    return () => ipcRenderer.removeListener('system-media-updated', handler);
+  },
+  onDevicesUpdated: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('devices-updated', handler);
+    return () => ipcRenderer.removeListener('devices-updated', handler);
+  },
   platform: process.platform
 });

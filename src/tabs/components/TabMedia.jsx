@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Music, SkipBackIcon, Play, Pause, SkipForwardIcon } from "lucide-react";
 import { useSetting } from "../../hooks/useSetting";
 import { openMusicPlayer } from "../../utils/launcher";
@@ -21,27 +21,21 @@ export function TabMedia({ spotifyTrack, theme = "default" }) {
         userSelect: "none",
       }}
     >
-      <AnimatePresence mode="wait">
-        {spotifyTrack ? (
-          <motion.div
-            key={spotifyTrack.name + spotifyTrack.artist}
-            initial={{ opacity: 0, filter: "blur(10px)", scale: 0.95 }}
-            animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
-            exit={{ opacity: 0, filter: "blur(10px)", scale: 0.95 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-start",
-              width: "100%",
-              height: "100%",
-              gap: "8px",
-              paddingLeft: "17px",
-              opacity: spotifyTrack.state === "playing" ? 1 : 0.5,
-              filter: spotifyTrack.state === "playing" ? "none" : "grayscale(1)",
-              transition: "opacity 0.3s ease, filter 0.3s ease",
-            }}
-          >
+      {spotifyTrack ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            width: "100%",
+            height: "100%",
+            gap: "8px",
+            paddingLeft: "17px",
+            opacity: spotifyTrack.state === "playing" ? 1 : 0.5,
+            filter: spotifyTrack.state === "playing" ? "none" : "grayscale(1)",
+            transition: "opacity 0.3s ease, filter 0.3s ease",
+          }}
+        >
             {spotifyTrack.artwork_url ? (
               <img
                 ref={albumRef}
@@ -238,13 +232,9 @@ export function TabMedia({ spotifyTrack, theme = "default" }) {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         ) : (
-          <motion.div
-            key="nothing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
             style={{
               width: "100%",
               textAlign: "center",
@@ -256,9 +246,8 @@ export function TabMedia({ spotifyTrack, theme = "default" }) {
             <p style={{ margin: "5px 0 0 0", opacity: 0.7, fontSize: 13 }}>
               Play music on Spotify or Apple Music
             </p>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

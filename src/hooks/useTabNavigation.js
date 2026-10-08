@@ -155,9 +155,18 @@ export function useTabNavigation({
     };
   }, [visibleTabs, currentTabId, switchTab]);
 
+  const setCurrentTabId = useCallback((id, forcedDirection) => {
+    if (!visibleTabs.includes(id)) return;
+    setTabState(([currentId]) => [
+      id,
+      forcedDirection !== undefined ? forcedDirection : (id >= currentId ? 1 : -1)
+    ]);
+  }, [visibleTabs]);
+
   return {
     visibleTabs,
     currentTabId,
+    setCurrentTabId,
     direction,
     handleWheelSwipe,
     handlePointerDown,

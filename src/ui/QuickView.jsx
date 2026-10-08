@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera, Mic, Headphones, Zap } from "lucide-react";
 import { WeatherIcon } from "./icons";
+import { measureTextWidth } from "../utils/ui";
 
 export function QuickView({
   spotifyTrack,
@@ -17,9 +18,27 @@ export function QuickView({
   weather,
   textColor,
   theme,
+  mediaMarqueeEnabled = true,
+  mediaShowArtwork = true,
+  mediaArtworkRadius = 6,
+  islandWidth = 170,
 }) {
   const hasActiveAlert = alert || chargingAlert || bluetoothAlert || cameraAlert || microphoneAlert;
   const isNowPlaying = (isPlaying || showPausedQuickView) && !hasActiveAlert;
+
+  const trackTitle = spotifyTrack?.name || "Music";
+  const trackArtist = spotifyTrack?.artist || "";
+  const fullTrackLabel = trackArtist ? `${trackTitle} • ${trackArtist}` : trackTitle;
+  const hasArtwork = Boolean(mediaShowArtwork && spotifyTrack?.artwork_url);
+
+  // Available text space = islandWidth - padding (28) - optional artwork (26 + 8) - waveform (24) - gap (10)
+  const availableTextSpace = Math.max(40, islandWidth - 62 - (hasArtwork ? 34 : 0));
+  const measuredWidth = measureTextWidth(trackTitle, "600 14px OpenRunde, Arial, sans-serif") +
+    (trackArtist ? measureTextWidth(` • ${trackArtist}`, "400 12px OpenRunde, Arial, sans-serif") : 0);
+  const isTextOverflowing = measuredWidth > availableTextSpace;
+  const shouldMarquee = mediaMarqueeEnabled && isTextOverflowing;
+
+  const borderRadiusVal = Number(mediaArtworkRadius) >= 13 ? "50%" : `${mediaArtworkRadius ?? 6}px`;
 
   return (
     <AnimatePresence mode="wait">
@@ -41,6 +60,25 @@ export function QuickView({
             overflow: "hidden",
           }}
         >
+          {hasArtwork && (
+            <motion.img
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              src={spotifyTrack.artwork_url}
+              alt="Artwork"
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: borderRadiusVal,
+                objectFit: "cover",
+                marginRight: 8,
+                flexShrink: 0,
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.25)",
+              }}
+            />
+          )}
+
           <div
             style={{
               display: "flex",
@@ -48,34 +86,120 @@ export function QuickView({
               overflow: "hidden",
               minWidth: 0,
               flex: 1,
-              maskImage: "linear-gradient(to right, black 85%, transparent 100%)",
-              WebkitMaskImage: "linear-gradient(to right, black 85%, transparent 100%)",
+              maskImage: shouldMarquee
+                ? "linear-gradient(to right, transparent, black 10px, black calc(100% - 10px), transparent)"
+                : "none",
+              WebkitMaskImage: shouldMarquee
+                ? "linear-gradient(to right, transparent, black 10px, black calc(100% - 10px), transparent)"
+                : "none",
             }}
           >
-            <span
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                color: textColor,
-                fontFamily: theme === "win95" ? "w95" : "OpenRunde",
-              }}
-            >
-              {spotifyTrack?.name || "Music"}
-            </span>
-            {spotifyTrack?.artist && (
-              <span
+            {shouldMarquee ? (
+              <motion.div
+                animate={{ x: ["0%", "-50%"] }}
+                transition={{
+                  repeat: Infinity,
+                  ease: "linear",
+                  duration: Math.max(8, fullTrackLabel.length * 0.35),
+                }}
                 style={{
-                  fontSize: 12,
-                  opacity: 0.7,
-                  marginLeft: 6,
+                  display: "inline-flex",
+                  alignItems: "center",
                   whiteSpace: "nowrap",
-                  color: textColor,
-                  fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                  flexShrink: 0,
+                  willChange: "transform",
                 }}
               >
-                • {spotifyTrack.artist}
-              </span>
+                <div style={{ display: "inline-flex", alignItems: "center", paddingRight: 24 }}>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: textColor,
+                      fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                    }}
+                  >
+                    {trackTitle}
+                  </span>
+                  {trackArtist && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.7,
+                        marginLeft: 6,
+                        color: textColor,
+                        fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                      }}
+                    >
+                      • {trackArtist}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "inline-flex", alignItems: "center", paddingRight: 24 }}>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: textColor,
+                      fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                    }}
+                  >
+                    {trackTitle}
+                  </span>
+                  {trackArtist && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.7,
+                        marginLeft: 6,
+                        color: textColor,
+                        fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                      }}
+                    >
+                      • {trackArtist}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    color: textColor,
+                    fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                  }}
+                >
+                  {trackTitle}
+                </span>
+                {trackArtist && (
+                  <span
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.7,
+                      marginLeft: 6,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: textColor,
+                      fontFamily: theme === "win95" ? "w95" : "OpenRunde",
+                    }}
+                  >
+                    • {trackArtist}
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, marginLeft: 8 }}>

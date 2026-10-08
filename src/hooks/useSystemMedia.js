@@ -6,7 +6,23 @@ export function useSystemMedia() {
   const pausedTimeout = useRef(null);
 
   useEffect(() => {
-    const fetchMedia = async () => {
+    // Immediate initial probe
+    if (window.electronAPI?.getSystemMedia) {
+      window.electronAPI.getSystemMedia().then((track) => {
+        if (track !== undefined) setSpotifyTrack(track);
+      }).catch(console.error);
+    }
+
+    // Reactive push listener from D-Bus / OS events
+    if (window.electronAPI?.onSystemMediaUpdated) {
+      const unsubscribe = window.electronAPI.onSystemMediaUpdated((track) => {
+        setSpotifyTrack(track);
+      });
+      return () => unsubscribe();
+    }
+
+    // Fallback polling for platforms without push notifications
+    const interval = setInterval(async () => {
       if (window.electronAPI?.getSystemMedia) {
         try {
           const track = await window.electronAPI.getSystemMedia();
@@ -15,10 +31,7 @@ export function useSystemMedia() {
           console.error(e);
         }
       }
-    };
-
-    fetchMedia();
-    const interval = setInterval(fetchMedia, 2000);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 

@@ -30,6 +30,7 @@ export function TabSettings({
   const [weatherUnit, setWeatherUnit] = useSetting("weatherUnit");
   const [quickApps, setQuickApps] = useSetting("quickApps");
   const [workflows, setWorkflows] = useSetting("workflows");
+  const [mediaArtworkRadius, setMediaArtworkRadius] = useSetting("mediaArtworkRadius");
 
   const [newQuickApp, setNewQuickApp] = useState("");
   const [appSuggestions, setAppSuggestions] = useState([]);
@@ -363,6 +364,33 @@ export function TabSettings({
         </SettingRow>
 
         <SettingToggle settingKey="islandBorder" label="Border Outline" />
+      </SettingSection>
+
+      <SettingSection title="Now Playing Island">
+        <SettingRow label="Max Island Width">
+          <SettingSelect
+            settingKey="mediaMaxIslandWidth"
+            options={[
+              { value: 260, label: "Compact (260px)" },
+              { value: 300, label: "Standard (300px)" },
+              { value: 360, label: "Wide (360px)" },
+              { value: 420, label: "Extra Wide (420px)" },
+              { value: 500, label: "Full Dynamic (500px)" },
+            ]}
+          />
+        </SettingRow>
+        <SettingToggle settingKey="mediaMarqueeEnabled" label="Marquee Text Scroll" />
+        <SettingToggle settingKey="mediaShowArtwork" label="Show Album Artwork" />
+        <SettingRow label={`Artwork Corner Radius (${Number(mediaArtworkRadius) >= 13 ? "Circle" : `${mediaArtworkRadius ?? 6}px`})`}>
+          <input
+            type="range"
+            min="0"
+            max="13"
+            step="1"
+            value={mediaArtworkRadius ?? 6}
+            onChange={(e) => setMediaArtworkRadius(parseInt(e.target.value, 10))}
+          />
+        </SettingRow>
       </SettingSection>
 
       <SettingSection title="Features">

@@ -31,12 +31,11 @@ const showMainWindow = () => {
   if (!mainWindow || !mainWindowReady) return;
   if (process.platform === "linux" && !mainWindowInputShapeReady) return;
 
-  mainWindow.show();
+  mainWindow.showInactive();
   mainWindow.setAlwaysOnTop(
     true,
     process.platform === "linux" ? "screen-saver" : "pop-up-menu",
   );
-  mainWindow.focus();
 };
 
 const applyLinuxInputShape = (rect) => {
@@ -548,7 +547,7 @@ const createWindow = () => {
   const winX = x;
   const winY = y;
 
-  const windowType = isWindows ? "toolbar" : "panel";
+  const windowType = isWindows ? "toolbar" : isLinux ? "utility" : "panel";
 
   mainWindow = new BrowserWindow({
     width: winWidth,
@@ -660,9 +659,74 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error("Failed to create tray:", e);
   }
+
+  if (process.platform === "linux") {
+    startLinuxMonitor();
+  }
 });
 
+let linuxMonitorProcess = null;
+let cachedLinuxMedia = null;
+let cachedLinuxDevices = { camera: false, microphone: false, bluetooth: false };
+
+function startLinuxMonitor() {
+  if (linuxMonitorProcess) return;
+  const candidates = [
+    path.join(__dirname, "../scripts/linux-monitor.py"),
+    path.join(app.getAppPath(), "scripts/linux-monitor.py"),
+    path.join(process.cwd(), "scripts/linux-monitor.py"),
+  ];
+  const scriptPath = candidates.find((p) => fs.existsSync(p));
+  if (!scriptPath) {
+    console.warn("linux-monitor.py not found in candidate paths:", candidates);
+    return;
+  }
+
+  try {
+    linuxMonitorProcess = spawn("python3", [scriptPath], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    let buffer = "";
+    linuxMonitorProcess.stdout.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep last incomplete line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line.trim());
+          if (msg.type === "media") {
+            cachedLinuxMedia = msg.data;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("system-media-updated", msg.data);
+            }
+          } else if (msg.type === "devices") {
+            cachedLinuxDevices = msg.data;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("devices-updated", msg.data);
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    linuxMonitorProcess.on("exit", () => {
+      linuxMonitorProcess = null;
+    });
+  } catch (err) {
+    console.error("Failed to start linux monitor:", err);
+  }
+}
+
 app.on("before-quit", () => {
+  if (linuxMonitorProcess) {
+    try {
+      linuxMonitorProcess.kill();
+    } catch (_) {}
+    linuxMonitorProcess = null;
+  }
   if (x11Display?.client) x11Display.client.terminate();
 });
 
@@ -800,20 +864,56 @@ ipcMain.handle("get-system-media", async () => {
         },
       );
     } else if (platform === "linux") {
-      exec(
-        'playerctl metadata --format "{{title}}||{{artist}}||{{album}}||{{status}}"',
-        (err, stdout) => {
-          if (err || !stdout) return resolve(null);
-          const parts = stdout.trim().split("||");
-          resolve({
-            name: parts[0],
-            artist: parts[1],
-            album: parts[2],
-            state: parts[3].toLowerCase(),
-            source: "System",
-          });
-        },
-      );
+      if (cachedLinuxMedia !== null && cachedLinuxMedia !== undefined) {
+        return resolve(cachedLinuxMedia);
+      }
+      const dbusScript = `import dbus, json
+try:
+    bus = dbus.SessionBus()
+    players = [name for name in bus.list_names() if name.startswith('org.mpris.MediaPlayer2.')]
+    if not players:
+        print('null')
+        exit(0)
+    selected = None
+    for name in players:
+        try:
+            proxy = bus.get_object(name, '/org/mpris/MediaPlayer2')
+            props = dbus.Interface(proxy, 'org.freedesktop.DBus.Properties')
+            status = str(props.Get('org.mpris.MediaPlayer2.Player', 'PlaybackStatus', dbus_interface='org.freedesktop.DBus.Properties'))
+            meta = props.Get('org.mpris.MediaPlayer2.Player', 'Metadata', dbus_interface='org.freedesktop.DBus.Properties')
+            title = str(meta.get('xesam:title', ''))
+            artist_list = meta.get('xesam:artist', [])
+            artist = ', '.join([str(a) for a in artist_list]) if artist_list else ''
+            album = str(meta.get('xesam:album', ''))
+            art_url = str(meta.get('mpris:artUrl', ''))
+            data = {
+                'name': title,
+                'artist': artist,
+                'album': album,
+                'artwork_url': art_url or None,
+                'state': 'playing' if status.lower() == 'playing' else 'paused',
+                'source': name.replace('org.mpris.MediaPlayer2.', '')
+            }
+            if status.lower() == 'playing':
+                selected = data
+                break
+            if not selected and title:
+                selected = data
+        except Exception:
+            continue
+    print(json.dumps(selected or None, ensure_ascii=False))
+except Exception:
+    print('null')
+`;
+      exec(`python3 -c "${dbusScript.replace(/"/g, '\\"')}"`, (err, stdout) => {
+        if (err || !stdout || stdout.trim() === "null") return resolve(null);
+        try {
+          const parsed = JSON.parse(stdout.trim());
+          resolve(parsed);
+        } catch (_) {
+          resolve(null);
+        }
+      });
     } else {
       resolve(null);
     }
@@ -844,6 +944,9 @@ ipcMain.handle("get-bluetooth-status", async () => {
         resolve(stdout.trim().toLowerCase() === "true");
       });
     } else if (platform === "linux") {
+      if (cachedLinuxDevices?.bluetooth !== undefined) {
+        return resolve(cachedLinuxDevices.bluetooth);
+      }
       exec("bluetoothctl devices Connected", (error, stdout) => {
         if (error) return resolve(false);
         resolve(stdout.trim().length > 0);
@@ -879,6 +982,9 @@ ipcMain.handle("get-camera-status", async () => {
         resolve(stdout.trim().toLowerCase() === "true");
       });
     } else if (platform === "linux") {
+      if (cachedLinuxDevices?.camera !== undefined) {
+        return resolve(cachedLinuxDevices.camera);
+      }
       exec("fuser /dev/video* 2>/dev/null", (error, stdout) => {
         resolve(stdout.trim().length > 0);
       });
@@ -902,6 +1008,9 @@ ipcMain.handle("get-microphone-status", async () => {
         resolve(stdout.trim().toLowerCase() === "true");
       });
     } else if (platform === "linux") {
+      if (cachedLinuxDevices?.microphone !== undefined) {
+        return resolve(cachedLinuxDevices.microphone);
+      }
       exec("pactl list source-outputs | grep -q 'Source #'", (error) => {
         resolve(!error);
       });
@@ -934,8 +1043,23 @@ ipcMain.handle("control-system-media", async (event, command) => {
         `;
     exec(`osascript -e '${script}'`);
   } else if (platform === "linux") {
-    let cmd = command;
-    if (command === "playpause") cmd = "play-pause";
-    exec(`playerctl ${cmd}`);
+    const action = command === "playpause" ? "PlayPause" : command === "next" ? "Next" : command === "previous" ? "Previous" : "";
+    if (!action) return;
+    const dbusCmdScript = `import dbus
+try:
+    bus = dbus.SessionBus()
+    players = [name for name in bus.list_names() if name.startswith('org.mpris.MediaPlayer2.')]
+    for name in players:
+        try:
+            proxy = bus.get_object(name, '/org/mpris/MediaPlayer2')
+            player = dbus.Interface(proxy, 'org.mpris.MediaPlayer2.Player')
+            getattr(player, '${action}')()
+            break
+        except Exception:
+            continue
+except Exception:
+    pass
+`;
+    exec(`python3 -c "${dbusCmdScript.replace(/"/g, '\\"')}"`);
   }
 });

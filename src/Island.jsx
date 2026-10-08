@@ -40,6 +40,10 @@ export default function Island() {
   const [currentDisplayId, setCurrentDisplayId] = useSetting("targetDisplay");
   const [autoLaunchEnabled] = useSetting("autoLaunch");
   const [newUser, setNewUser] = useSetting("newUser");
+  const [mediaMaxIslandWidth] = useSetting("mediaMaxIslandWidth");
+  const [mediaMarqueeEnabled] = useSetting("mediaMarqueeEnabled");
+  const [mediaShowArtwork] = useSetting("mediaShowArtwork");
+  const [mediaArtworkRadius] = useSetting("mediaArtworkRadius");
 
   const [displays, setDisplays] = useState([]);
 
@@ -62,6 +66,7 @@ export default function Island() {
   const {
     visibleTabs,
     currentTabId,
+    setCurrentTabId,
     direction,
     handleWheelSwipe,
     handlePointerDown,
@@ -241,9 +246,13 @@ export default function Island() {
     return () => window.removeEventListener("resize", syncLinuxWindowShape);
   }, []);
 
+  const maxAllowedWidth = Number(mediaMaxIslandWidth) || 360;
   const nowPlayingText = spotifyTrack?.name ? `${spotifyTrack.name}${spotifyTrack.artist ? ` • ${spotifyTrack.artist}` : ""}` : "";
   const textWidth = measureTextWidth(nowPlayingText) || (nowPlayingText.length * 7);
-  const nowPlayingWidth = Math.min(300, Math.max(122, Math.ceil(textWidth + 24 + 6 + 20)));
+  const hasArtwork = Boolean(mediaShowArtwork && spotifyTrack?.artwork_url);
+  // Add padding: left padding (12) + optional artwork (26 + 8) + waveform (24) + gap (8) + right padding (12) + text buffer (10)
+  const baseExtraSpace = (hasArtwork ? 34 : 0) + 64;
+  const nowPlayingWidth = Math.min(maxAllowedWidth, Math.max(hasArtwork ? 170 : 140, Math.ceil(textWidth + baseExtraSpace)));
 
   const activeTabDef = getTabById(currentTab);
   const activeDimensions = typeof activeTabDef?.dimensions === "function"
@@ -251,13 +260,14 @@ export default function Island() {
     : (activeTabDef?.dimensions ?? { width: 380, height: 190 });
 
   const hasAlert = alert || chargingAlert || bluetoothAlert || cameraAlert || microphoneAlert;
+  const isNowPlayingCompact = (isPlaying || showPausedQuickView) && !hasAlert;
   let width = mode === "large"
     ? activeDimensions.width
-    : (mode === "quick" && isPlaying && !hasAlert)
+    : (mode === "quick" && isNowPlayingCompact)
       ? nowPlayingWidth
       : (mode === "quick" || hasAlert)
         ? 260
-        : isPlaying
+        : isNowPlayingCompact
           ? nowPlayingWidth
           : 170;
 
@@ -266,9 +276,9 @@ export default function Island() {
   const tabVariants = {
     enter: (direction) => ({
       x: direction > 0 ? 300 : direction < 0 ? -300 : 0,
-      opacity: 0,
-      scale: 0.95,
-      filter: "blur(10px)",
+      opacity: direction === 0 ? 1 : 0,
+      scale: direction === 0 ? 1 : 0.95,
+      filter: direction === 0 ? "blur(0px)" : "blur(10px)",
     }),
     center: {
       x: 0,
@@ -278,9 +288,9 @@ export default function Island() {
     },
     exit: (direction) => ({
       x: direction < 0 ? 300 : direction > 0 ? -300 : 0,
-      opacity: 0,
-      scale: 0.95,
-      filter: "blur(10px)",
+      opacity: direction === 0 ? 1 : 0,
+      scale: direction === 0 ? 1 : 0.95,
+      filter: direction === 0 ? "blur(0px)" : "blur(10px)",
     }),
   };
 
@@ -330,6 +340,18 @@ export default function Island() {
         const activeTag = document.activeElement?.tagName;
         if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") {
           document.activeElement.blur();
+        }
+
+        // If clicking compact island:
+        // - when music is active -> open Media tab (id: 3) without slide animation
+        // - when showing clock/idle status -> open Overview tab (id: 2) without slide animation
+        if (mode !== "large") {
+          const hasAlert = alert || chargingAlert || bluetoothAlert || cameraAlert || microphoneAlert;
+          if ((isPlaying || showPausedQuickView) && !hasAlert) {
+            setCurrentTabId(3, 0);
+          } else if (!hasAlert) {
+            setCurrentTabId(2, 0);
+          }
         }
 
         setMode((prev) => (prev === "large" ? "quick" : "large"));
@@ -416,8 +438,8 @@ export default function Island() {
         pointerEvents: "auto",
       }}
     >
-      {/* Quickview bar */}
-      {mode !== "large" && (mode === "quick" || (mode === "still" && showInfoWhenIdleEnabled) || (mode === "still" && (isPlaying || showPausedQuickView)) || hasAlert) && (
+      {/* Quickview bar: always show content in compact mode (clock, media, or alerts) */}
+      {mode !== "large" && (
         <QuickView
           spotifyTrack={spotifyTrack}
           isPlaying={isPlaying}
@@ -433,22 +455,26 @@ export default function Island() {
           weather={weather}
           textColor={textColor}
           theme={theme}
+          mediaMarqueeEnabled={mediaMarqueeEnabled}
+          mediaShowArtwork={mediaShowArtwork}
+          mediaArtworkRadius={mediaArtworkRadius}
+          islandWidth={width}
         />
       )}
 
       {/* Large mode tab container */}
-      <AnimatePresence custom={direction} mode="popLayout">
+      <AnimatePresence custom={direction} mode="popLayout" initial={direction !== 0}>
         {mode === "large" && (
           <motion.div
             key={currentTabId}
             custom={direction}
             variants={tabVariants}
-            initial="enter"
+            initial={direction === 0 ? "center" : "enter"}
             animate="center"
             exit="exit"
             transition={{
-              x: { type: "spring", stiffness: 450, damping: 40, mass: 1 },
-              opacity: { duration: 0.15 },
+              x: direction === 0 ? { duration: 0 } : { type: "spring", stiffness: 450, damping: 40, mass: 1 },
+              opacity: { duration: direction === 0 ? 0 : 0.15 },
             }}
             style={{
               width: "100%",

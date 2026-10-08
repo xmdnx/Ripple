@@ -16,7 +16,7 @@ export const DEFAULT_SETTINGS = {
   standbyMode: false,
   largeStandbyMode: false,
   hideNotActiveIsland: false,
-  showInfoWhenIdle: false,
+  showInfoWhenIdle: true,
 
   // Alerts
   batteryAlerts: true,
@@ -35,6 +35,12 @@ export const DEFAULT_SETTINGS = {
   ],
   workflows: [],
   tasks: [],
+
+  // Now Playing Island Adaptations
+  mediaMaxIslandWidth: 360,
+  mediaMarqueeEnabled: true,
+  mediaShowArtwork: true,
+  mediaArtworkRadius: 6,
 
   // Weather
   weatherUnit: "f",
