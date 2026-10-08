@@ -1,6 +1,14 @@
 "use strict";
 import x11Module from "x11";
 
+process.on("uncaughtException", (error) => {
+  console.error("Main process uncaught exception:", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Main process unhandled rejection:", reason);
+});
+
 const {
   app,
   BrowserWindow,
@@ -403,6 +411,47 @@ ipcMain.handle("focus-window", () => {
 
 ipcMain.handle("open-external", async (event, url) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle("open-path", async (event, filePath) => {
+  if (!filePath) return;
+  return shell.openPath(filePath);
+});
+
+ipcMain.on("start-drag", (event, item) => {
+  try {
+    if (!item) return;
+    let targetPath = item.file || item.path;
+
+    if (!targetPath && (item.content || item.type)) {
+      const tempDir = path.join(app.getPath("temp"), "ripple-shelf");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      if (item.type === "image" && item.content && item.content.startsWith("data:image")) {
+        const ext = item.content.match(/data:image\/([a-zA-Z0-9]+);/)?.[1] || "png";
+        const fileName = (item.name || `image_${Date.now()}`).replace(/[^\w.-]/g, "_") + (item.name?.includes(".") ? "" : `.${ext}`);
+        targetPath = path.join(tempDir, fileName);
+        const base64Data = item.content.replace(/^data:image\/\w+;base64,/, "");
+        fs.writeFileSync(targetPath, Buffer.from(base64Data, "base64"));
+      } else if (item.content) {
+        const fileName = (item.name || `snippet_${Date.now()}`).replace(/[^\w.-]/g, "_") + ".txt";
+        targetPath = path.join(tempDir, fileName);
+        fs.writeFileSync(targetPath, item.content, "utf8");
+      }
+    }
+
+    if (targetPath && fs.existsSync(targetPath)) {
+      const iconPath = getIconPath();
+      event.sender.startDrag({
+        file: targetPath,
+        icon: iconPath,
+      });
+    }
+  } catch (err) {
+    console.error("Failed to start drag:", err);
+  }
 });
 
 ipcMain.handle("launch-app", async (event, appName) => {
@@ -986,7 +1035,7 @@ ipcMain.handle("get-camera-status", async () => {
         return resolve(cachedLinuxDevices.camera);
       }
       exec("fuser /dev/video* 2>/dev/null", (error, stdout) => {
-        resolve(stdout.trim().length > 0);
+        resolve(Boolean(stdout && stdout.trim().length > 0));
       });
     } else {
       resolve(false);
@@ -1011,13 +1060,47 @@ ipcMain.handle("get-microphone-status", async () => {
       if (cachedLinuxDevices?.microphone !== undefined) {
         return resolve(cachedLinuxDevices.microphone);
       }
-      exec("pactl list source-outputs | grep -q 'Source #'", (error) => {
-        resolve(!error);
+      exec("pw-dump 2>/dev/null", (error, stdout) => {
+        if (!error && stdout) {
+          try {
+            const data = JSON.parse(stdout);
+            const inUse = data.some((item) => {
+              const mediaClass = item?.info?.props?.["media.class"] || "";
+              const state = item?.info?.state || "";
+              return (mediaClass.includes("Stream/Input/Audio") || mediaClass.includes("Record")) && state === "running";
+            });
+            return resolve(inUse);
+          } catch (_) {}
+        }
+        resolve(false);
       });
     } else {
       resolve(false);
     }
   });
+});
+
+ipcMain.handle("get-battery-status", async () => {
+  if (process.platform === "linux") {
+    try {
+      const bats = fs.readdirSync("/sys/class/power_supply").filter((f) => f.startsWith("BAT"));
+      if (bats.length > 0) {
+        const batDir = path.join("/sys/class/power_supply", bats[0]);
+        const capFile = path.join(batDir, "capacity");
+        const statFile = path.join(batDir, "status");
+        if (fs.existsSync(capFile)) {
+          const cap = parseInt(fs.readFileSync(capFile, "utf8").trim(), 10);
+          let charging = false;
+          if (fs.existsSync(statFile)) {
+            const stat = fs.readFileSync(statFile, "utf8").trim().toLowerCase();
+            charging = stat === "charging" || stat === "full";
+          }
+          return { percent: cap, charging };
+        }
+      }
+    } catch (_) {}
+  }
+  return null;
 });
 
 app.on("window-all-closed", () => {

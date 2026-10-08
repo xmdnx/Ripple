@@ -10,8 +10,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBluetoothStatus: () => ipcRenderer.invoke('get-bluetooth-status'),
   getCameraStatus: () => ipcRenderer.invoke('get-camera-status'),
   getMicrophoneStatus: () => ipcRenderer.invoke('get-microphone-status'),
+  getBatteryStatus: () => ipcRenderer.invoke('get-battery-status'),
   controlSystemMedia: (command) => ipcRenderer.invoke('control-system-media', command),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  openPath: (path) => ipcRenderer.invoke('open-path', path),
+  startDrag: (item) => ipcRenderer.send('start-drag', item),
+  getPathForFile: (file) => {
+    try {
+      const { webUtils } = require('electron');
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (_) {}
+    return file?.path || '';
+  },
   launchApp: (appName) => ipcRenderer.invoke('launch-app', appName),
   buildAppCache: () => ipcRenderer.invoke('build-app-cache'),
   searchApps: (query) => ipcRenderer.invoke('search-apps', query),

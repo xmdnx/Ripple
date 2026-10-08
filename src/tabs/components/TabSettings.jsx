@@ -150,7 +150,8 @@ export function TabSettings({
                 style={{ cursor: "grab" }}
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", i);
+                  e.dataTransfer.setData("ripple-tab-reorder", String(i));
+                  e.dataTransfer.setData("text/plain", String(i));
                   e.currentTarget.style.opacity = "0.4";
                   e.currentTarget.style.borderStyle = "dashed";
                 }}

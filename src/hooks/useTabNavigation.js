@@ -83,6 +83,7 @@ export function useTabNavigation({
       target?.closest?.("textarea") ||
       target?.closest?.(".tab-order-item") ||
       target?.closest?.(".task-row") ||
+      target?.closest?.(".shelf-row") ||
       target?.closest?.(".clipboard-row")
     );
   };

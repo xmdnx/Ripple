@@ -1,9 +1,9 @@
-import { Search, Zap, Sun, Music, List, Check, Settings } from "lucide-react";
+import { Search, Zap, Sun, Music, FolderDown, Check, Settings } from "lucide-react";
 import { TabSearch } from "./components/TabSearch";
 import { TabWorkflows } from "./components/TabWorkflows";
 import { TabOverview } from "./components/TabOverview";
 import { TabMedia } from "./components/TabMedia";
-import { TabClipboard } from "./components/TabClipboard";
+import { TabShelf } from "./components/TabShelf";
 import { TabTasks } from "./components/TabTasks";
 import { TabSettings } from "./components/TabSettings";
 
@@ -38,10 +38,10 @@ export const TAB_REGISTRY = [
   },
   {
     id: 5,
-    name: "Clipboard",
-    icon: (color) => <List size={16} color={color} />,
-    dimensions: { width: 380, height: 190 },
-    Component: TabClipboard,
+    name: "Shelf",
+    icon: (color) => <FolderDown size={16} color={color} />,
+    dimensions: { width: 400, height: 230 },
+    Component: TabShelf,
   },
   {
     id: 6,

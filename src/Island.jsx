@@ -8,10 +8,11 @@ import { useBattery } from "./hooks/useBattery";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useSystemMedia } from "./hooks/useSystemMedia";
 import { useClock } from "./hooks/useClock";
-import { useClipboardHistory } from "./hooks/useClipboardHistory";
+import { useShelf } from "./hooks/useShelf";
 import { useTabNavigation } from "./hooks/useTabNavigation";
 import { measureTextWidth } from "./utils/ui";
 import { QuickView } from "./ui/QuickView";
+import { FolderDown } from "lucide-react";
 
 export default function Island() {
   const islandElementRef = useRef(null);
@@ -49,7 +50,10 @@ export default function Island() {
 
   const { time } = useClock();
   const { weather } = useWeather();
-  const clipboard = useClipboardHistory();
+  const shelf = useShelf();
+  const [isDragOverIsland, setIsDragOverIsland] = useState(false);
+  const dragCounter = useRef(0);
+  const modeBeforeDragRef = useRef(null);
   const { percent, charging, alert, chargingAlert } = useBattery();
   const {
     bluetooth,
@@ -294,12 +298,161 @@ export default function Island() {
     }),
   };
 
+  const handleIslandDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    if (dt?.types?.includes("ripple-tab-reorder") || dt?.types?.includes("ripple-shelf-drag")) {
+      return;
+    }
+
+    dragCounter.current += 1;
+    if (!isDragOverIsland) {
+      setIsDragOverIsland(true);
+      if (mode !== "large") {
+        modeBeforeDragRef.current = mode;
+        setMode("large");
+      }
+      setCurrentTabId(5, 0);
+      if (window.electronAPI) {
+        window.electronAPI.setIgnoreMouseEvents(false, false);
+      }
+    }
+  };
+
+  const handleIslandDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    if (dt?.types?.includes("ripple-tab-reorder") || dt?.types?.includes("ripple-shelf-drag")) {
+      return;
+    }
+    try {
+      e.dataTransfer.dropEffect = "copy";
+    } catch (_) {}
+  };
+
+  const handleIslandDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    if (dt?.types?.includes("ripple-tab-reorder") || dt?.types?.includes("ripple-shelf-drag")) {
+      return;
+    }
+
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragOverIsland(false);
+      if (modeBeforeDragRef.current) {
+        setMode(modeBeforeDragRef.current);
+        modeBeforeDragRef.current = null;
+      }
+    }
+  };
+
+  const handleIslandDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dt = e.dataTransfer;
+    if (dt?.types?.includes("ripple-tab-reorder") || dt?.types?.includes("ripple-shelf-drag")) {
+      return;
+    }
+
+    dragCounter.current = 0;
+    setIsDragOverIsland(false);
+    modeBeforeDragRef.current = null;
+
+    if (!dt) return;
+
+    const newEntries = [];
+
+    // 1. Files
+    if (dt.files && dt.files.length > 0) {
+      for (let i = 0; i < dt.files.length; i++) {
+        const file = dt.files[i];
+        let filePath = "";
+        try {
+          if (window.electronAPI?.getPathForFile) {
+            filePath = window.electronAPI.getPathForFile(file);
+          } else if (file.path) {
+            filePath = file.path;
+          }
+        } catch (_) {}
+
+        const isImage = file.type?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(file.name);
+        let previewUrl = null;
+        if (isImage) {
+          try {
+            previewUrl = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = () => resolve(null);
+              reader.readAsDataURL(file);
+            });
+          } catch (_) {}
+        }
+
+        newEntries.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: isImage ? "image" : "file",
+          name: file.name || (isImage ? "Image" : "File"),
+          path: filePath,
+          size: file.size || 0,
+          preview: previewUrl,
+          createdAt: Date.now(),
+        });
+      }
+    } else {
+      // 2. Browser image drag
+      const html = dt.getData("text/html");
+      let imgSrc = null;
+      if (html) {
+        const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (match && match[1]) {
+          imgSrc = match[1];
+        }
+      }
+
+      // 3. Plain text or URL
+      const text = dt.getData("text/plain") || dt.getData("text/uri-list");
+      if (imgSrc) {
+        newEntries.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: "image",
+          name: "Web Image",
+          path: imgSrc,
+          preview: imgSrc,
+          createdAt: Date.now(),
+        });
+      } else if (text && text.trim()) {
+        const trimmed = text.trim();
+        const isUrl = /^https?:\/\//i.test(trimmed);
+        newEntries.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: isUrl ? "url" : "text",
+          content: trimmed,
+          name: isUrl ? trimmed : undefined,
+          createdAt: Date.now(),
+        });
+      }
+    }
+
+    if (newEntries.length > 0) {
+      shelf.addItems(newEntries);
+    }
+  };
+
   const ActiveComponent = activeTabDef?.Component;
 
   return (
     <motion.div
       id="Island"
       ref={islandElementRef}
+      onDragEnter={handleIslandDragEnter}
+      onDragOver={handleIslandDragOver}
+      onDragLeave={handleIslandDragLeave}
+      onDrop={handleIslandDrop}
       onMouseEnter={() => {
         setIsHovered(true);
         if (mode === "still" && showInfoWhenIdleEnabled && !isPlaying) {
@@ -493,7 +646,7 @@ export default function Island() {
                 charging={charging}
                 weather={weather}
                 spotifyTrack={spotifyTrack}
-                clipboard={clipboard}
+                shelf={shelf}
                 displays={displays}
                 currentDisplayId={currentDisplayId}
                 onDisplayChange={handleDisplayChange}
@@ -501,6 +654,63 @@ export default function Island() {
                 setTheme={setTheme}
               />
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Drag & Drop to Shelf Overlay */}
+      <AnimatePresence>
+        {isDragOverIsland && (
+          <motion.div
+            key="shelf-drop-overlay"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              right: 8,
+              bottom: 8,
+              borderRadius: mode === "large" && theme === "win95" ? 0 : 20,
+              border: `2px dashed ${textColor || "rgba(255, 255, 255, 0.7)"}`,
+              backgroundColor: "rgba(0, 0, 0, 0.8)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              zIndex: 1000,
+              pointerEvents: "none",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                backgroundColor: "rgba(255, 255, 255, 0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <FolderDown size={24} color={textColor || "#FFFFFF"} />
+            </div>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: textColor || "#FFFFFF",
+                letterSpacing: "0.2px",
+              }}
+            >
+              Save to Shelf
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
